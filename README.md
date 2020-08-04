@@ -1,2 +1,2 @@
-# ForwardedHeaderMiddleware
-Forwarded header middleware based on RFC 7239
+# Forwarded Http Middleware
+Forwarded Http middleware for ASP.NET Core based on RFC 7239
