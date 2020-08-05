@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace AspNetCore.ForwardedHttpMiddleware
+namespace AspNetCore.ForwardedHttp
 {
     [Flags]
     public enum ForwardedHttp

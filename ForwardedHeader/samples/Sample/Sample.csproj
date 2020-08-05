@@ -2,8 +2,10 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
-    <AssemblyName>AspNetCore.ForwardedHttpMiddleware</AssemblyName>
-    <RootNamespace>AspNetCore.ForwardedHttpMiddleware</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AspNetCore.ForwardedHeader.csproj" />
+  </ItemGroup>
 
 </Project>

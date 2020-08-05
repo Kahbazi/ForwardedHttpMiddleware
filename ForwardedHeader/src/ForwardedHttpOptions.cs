@@ -2,7 +2,7 @@
 using System.Net;
 using Microsoft.AspNetCore.HttpOverrides;
 
-namespace AspNetCore.ForwardedHttpMiddleware
+namespace AspNetCore.ForwardedHttp
 {
     public class ForwardedHttpOptions
     {

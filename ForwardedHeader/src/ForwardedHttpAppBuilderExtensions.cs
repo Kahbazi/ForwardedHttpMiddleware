@@ -1,9 +1,9 @@
 ﻿using System;
-using Microsoft.AspNetCore.Builder;
+using AspNetCore.ForwardedHttp;
 
-namespace AspNetCore.ForwardedHttpMiddleware
+namespace Microsoft.AspNetCore.Builder
 {
-    public static class ForwardedHttpExtensions
+    public static class ForwardedHttpAppBuilderExtensions
     {
         private const string ForwardedHttpAdded = "ForwardedHttpAdded";
 

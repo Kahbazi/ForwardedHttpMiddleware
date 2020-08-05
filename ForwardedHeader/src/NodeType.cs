@@ -1,4 +1,4 @@
-﻿namespace AspNetCore.ForwardedHttpMiddleware
+﻿namespace AspNetCore.ForwardedHttp
 {
     public enum NodeType
     {

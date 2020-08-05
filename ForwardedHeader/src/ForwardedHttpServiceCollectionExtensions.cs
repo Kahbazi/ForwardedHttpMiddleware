@@ -1,7 +1,7 @@
 ﻿using System;
-using Microsoft.Extensions.DependencyInjection;
+using AspNetCore.ForwardedHttp;
 
-namespace AspNetCore.ForwardedHttpMiddleware
+namespace Microsoft.Extensions.DependencyInjection
 {
     public static class ForwardedHttpServiceCollectionExtensions
     {
