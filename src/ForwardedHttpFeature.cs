@@ -2,20 +2,16 @@
 {
     public class ForwardedHttpFeature : IForwardedHttpFeature
     {
-        public ForwardedHttpFeature(NodeType forType, string @for, NodeType byType, string by)
-        {
-            ForType = forType;
-            For = @for;
-            ByType = byType;
-            By = by;
-        }
+        public NodeType ForType { get; set; }
 
-        public NodeType ForType { get; }
-
-        public string For { get; }
+        public string For { get; set; }
         
-        public NodeType ByType { get; }
+        public NodeType ByType { get; set; }
         
-        public string By { get; }
+        public string By { get; set; }
+        
+        public string Host { get; set; }
+        
+        public string Proto { get; set; }
     }
 }

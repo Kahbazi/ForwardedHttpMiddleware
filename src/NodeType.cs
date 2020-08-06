@@ -2,6 +2,7 @@
 {
     public enum NodeType
     {
+        None,
         IP,
         Obfuscated,
         Unknown

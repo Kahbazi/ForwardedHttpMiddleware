@@ -1,5 +1,6 @@
 ﻿using System;
 using AspNetCore.ForwardedHttp;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.AspNetCore.Builder
 {
@@ -23,6 +24,20 @@ namespace Microsoft.AspNetCore.Builder
             }
 
             return builder;
+        }
+
+        public static IApplicationBuilder UseForwardedHttp(this IApplicationBuilder builder, ForwardedHttpOptions options)
+        {
+            if (builder == null)
+            {
+                throw new ArgumentNullException(nameof(builder));
+            }
+            if (options == null)
+            {
+                throw new ArgumentNullException(nameof(options));
+            }
+
+            return builder.UseMiddleware<ForwardedHttpMiddleware>(Options.Create(options));
         }
     }
 }

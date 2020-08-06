@@ -9,5 +9,9 @@
         public NodeType ByType { get; }
 
         public string By { get; }
+
+        public string Host { get; }
+        
+        public string Proto { get; }
     }
 }
