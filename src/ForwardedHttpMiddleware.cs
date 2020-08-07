@@ -125,10 +125,14 @@ namespace AspNetCore.ForwardedHttp
             int entryCount = 0;
 
             var forwarded = context.Request.Headers["Forwarded"];
-            var forwardedHeader = new ForwardedHeader(forwarded);
+            var forwardedHeader = new ParseProxyValues(forwarded);
 
             var request = context.Request;
             var requestHeaders = context.Request.Headers;
+
+            var proxyValues = forwardedHeader.ForwardedValues;
+
+
             if ((_options.ForwardedHttp & ForwardedHttp.For) == ForwardedHttp.For)
             {
                 checkFor = true;
@@ -140,11 +144,6 @@ namespace AspNetCore.ForwardedHttp
             {
                 checkProto = true;
                 forwardedProto = forwardedHeader.Proto;
-                if (_options.RequireHeaderSymmetry && checkFor && forwardedFor.Count != forwardedProto.Count)
-                {
-                    _logger.LogWarning(1, "Parameter count mismatch between X-Forwarded-For and X-Forwarded-Proto.");
-                    return;
-                }
                 entryCount = Math.Max(forwardedProto.Count, entryCount);
             }
 
@@ -152,13 +151,6 @@ namespace AspNetCore.ForwardedHttp
             {
                 checkHost = true;
                 forwardedHost = forwardedHeader.Host;
-                if (_options.RequireHeaderSymmetry
-                    && ((checkFor && forwardedFor.Count != forwardedHost.Count)
-                        || (checkProto && forwardedProto.Count != forwardedHost.Count)))
-                {
-                    _logger.LogWarning(1, "Parameter count mismatch between X-Forwarded-Host and X-Forwarded-For or X-Forwarded-Proto.");
-                    return;
-                }
                 entryCount = Math.Max(forwardedHost.Count, entryCount);
             }
 
@@ -166,14 +158,6 @@ namespace AspNetCore.ForwardedHttp
             {
                 checkBy = true;
                 forwardedBy = forwardedHeader.By;
-                if (_options.RequireHeaderSymmetry
-                    && ((checkFor && forwardedFor.Count != forwardedBy.Count)
-                        || (checkProto && forwardedProto.Count != forwardedBy.Count)
-                        || (checkHost && forwardedHost.Count != forwardedBy.Count)))
-                {
-                    _logger.LogWarning(1, "Parameter count mismatch between X-Forwarded-Host and X-Forwarded-For or X-Forwarded-Proto.");
-                    return;
-                }
                 entryCount = Math.Max(forwardedBy.Count, entryCount);
             }
 

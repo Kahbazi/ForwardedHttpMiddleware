@@ -43,11 +43,5 @@ namespace AspNetCore.ForwardedHttp
         /// Identifies which forwarders should be processed.
         /// </summary>
         public ForwardedHttp ForwardedHttp { get; set; } = ForwardedHttp.None;
-
-        /// <summary>
-        /// Require the number of header values to be in sync between the different headers being processed.
-        /// The default is 'false'.
-        /// </summary>
-        public bool RequireHeaderSymmetry { get; set; } = false;
     }
 }
