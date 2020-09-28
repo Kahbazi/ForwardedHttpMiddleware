@@ -46,7 +46,7 @@ namespace AspNetCore.ForwardedHttp.Tests
             Assert.Equal("11.111.111.11", context.Connection.RemoteIpAddress.ToString());
             Assert.Equal(9090, context.Connection.RemotePort);
             // No Original set if RemoteIpAddress started null.
-            Assert.Equal(NodeType.None, context.Features.Get<IForwardedHttpFeature>().ForType);
+            Assert.Equal(NodeType.IP, context.Features.Get<IForwardedHttpFeature>().ForType);
             // Should have been consumed and removed
             Assert.False(context.Request.Headers.ContainsKey("Forwarded"));
         }
@@ -89,25 +89,16 @@ namespace AspNetCore.ForwardedHttp.Tests
         }
 
         [Theory]
-        [InlineData(1, "For=11.111.111.11:12345", "11.111.111.11", 12345, "", false)]
-        [InlineData(1, "For=11.111.111.11:12345", "11.111.111.11", 12345, "", true)]
-        [InlineData(10, "For=11.111.111.11:12345", "11.111.111.11", 12345, "", false)]
-        [InlineData(10, "For=11.111.111.11:12345", "11.111.111.11", 12345, "", true)]
-        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "For=12.112.112.12:23456", false)]
-        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "For=12.112.112.12:23456", true)]
-        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "", false)]
-        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "", true)]
-        [InlineData(10, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "", false)]
-        [InlineData(10, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "", true)]
-        [InlineData(10, "For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "For=12.112.112.12.23456", false)] // Invalid 2nd value
-        [InlineData(10, "For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "For=12.112.112.12.23456", true)] // Invalid 2nd value
-        [InlineData(10, "For=13.113.113.13:34567, For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "For=13.113.113.13:34567, For=12.112.112.12.23456", false)] // Invalid 2nd value
-        [InlineData(10, "For=13.113.113.13:34567, For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "For=13.113.113.13:34567, For=12.112.112.12.23456", true)] // Invalid 2nd value
-        [InlineData(2, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "For=13.113.113.13:34567", false)]
-        [InlineData(2, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "For=13.113.113.13:34567", true)]
-        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "13.113.113.13", 34567, "", false)]
-        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "13.113.113.13", 34567, "", true)]
-        public async Task ForwardedForForwardLimit(int limit, string forwardedHeader, string expectedIp, int expectedPort, string remainingHeader, bool requireSymmetry)
+        [InlineData(1, "For=11.111.111.11:12345", "11.111.111.11", 12345, "")]
+        [InlineData(10, "For=11.111.111.11:12345", "11.111.111.11", 12345, "")]
+        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "for=12.112.112.12:23456")]
+        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "")]
+        [InlineData(10, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "")]
+        [InlineData(10, "For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "for=12.112.112.12.23456")] // Invalid 2nd value
+        [InlineData(10, "For=13.113.113.13:34567, For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "for=13.113.113.13:34567, for=12.112.112.12.23456")] // Invalid 2nd value
+        [InlineData(2, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "for=13.113.113.13:34567")]
+        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "13.113.113.13", 34567, "")]
+        public async Task ForwardedForForwardLimit(int limit, string forwardedHeader, string expectedIp, int expectedPort, string remainingHeader)
         {
             using var host = new HostBuilder()
                 .ConfigureWebHost(webHostBuilder =>
@@ -119,7 +110,6 @@ namespace AspNetCore.ForwardedHttp.Tests
                         var options = new ForwardedHttpOptions
                         {
                             ForwardedHttp = ForwardedHttp.For,
-                            RequireHeaderSymmetry = requireSymmetry,
                             ForwardLimit = limit,
                         };
                         options.KnownProxies.Clear();
@@ -181,10 +171,6 @@ namespace AspNetCore.ForwardedHttp.Tests
             {
                 Assert.Equal("10.0.0.1", context.Connection.RemoteIpAddress.ToString());
                 Assert.Equal(1234, context.Connection.RemotePort);
-                var feature = context.Features.Get<IForwardedHttpFeature>();
-                Assert.NotNull(feature);
-                Assert.Equal(new IPEndPoint(IPAddress.Parse(originalIp), 99).ToString(), feature.For);
-                Assert.Equal(NodeType.IP, feature.ForType);
             }
             else
             {
@@ -195,29 +181,18 @@ namespace AspNetCore.ForwardedHttp.Tests
         }
 
         [Theory]
-        [InlineData(1, "For=11.111.111.11:12345", "20.0.0.1", "10.0.0.1", 99, false)]
-        [InlineData(1, "For=11.111.111.11:12345", "20.0.0.1", "10.0.0.1", 99, true)]
-        [InlineData(1, "", "10.0.0.1", "10.0.0.1", 99, false)]
-        [InlineData(1, "", "10.0.0.1", "10.0.0.1", 99, true)]
-        [InlineData(1, "For=11.111.111.11:12345", "10.0.0.1", "11.111.111.11", 12345, false)]
-        [InlineData(1, "For=11.111.111.11:12345", "10.0.0.1", "11.111.111.11", 12345, true)]
-        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1", "11.111.111.11", 12345, false)]
-        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1", "11.111.111.11", 12345, true)]
-        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11", "11.111.111.11", 12345, false)]
-        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11", "11.111.111.11", 12345, true)]
-        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11", "12.112.112.12", 23456, false)]
-        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11", "12.112.112.12", 23456, true)]
-        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "11.111.111.11", 12345, false)]
-        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "11.111.111.11", 12345, true)]
-        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "12.112.112.12", 23456, false)]
-        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "12.112.112.12", 23456, true)]
-        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "13.113.113.13", 34567, false)]
-        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "13.113.113.13", 34567, true)]
-        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12.23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "11.111.111.11", 12345, false)] // Invalid 2nd IP
-        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12.23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "11.111.111.11", 12345, true)] // Invalid 2nd IP
-        [InlineData(3, "For=13.113.113.13.34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "12.112.112.12", 23456, false)] // Invalid 3rd IP
-        [InlineData(3, "For=13.113.113.13.34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "12.112.112.12", 23456, true)] // Invalid 3rd IP
-        public async Task ForwardedForForwardKnownIps(int limit, string forwardedHeader, string knownIPs, string expectedIp, int expectedPort, bool requireSymmetry)
+        [InlineData(1, "For=11.111.111.11:12345", "20.0.0.1", "10.0.0.1", 99)]
+        [InlineData(1, "", "10.0.0.1", "10.0.0.1", 99)]
+        [InlineData(1, "For=11.111.111.11:12345", "10.0.0.1", "11.111.111.11", 12345)]
+        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1", "11.111.111.11", 12345)]
+        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11", "11.111.111.11", 12345)]
+        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11", "12.112.112.12", 23456)]
+        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "11.111.111.11", 12345)]
+        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "12.112.112.12", 23456)]
+        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "13.113.113.13", 34567)]
+        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12.23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "11.111.111.11", 12345)] // Invalid 2nd IP
+        [InlineData(3, "For=13.113.113.13.34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "10.0.0.1,11.111.111.11,12.112.112.12", "12.112.112.12", 23456)] // Invalid 3rd IP
+        public async Task ForwardedForForwardKnownIps(int limit, string forwardedHeader, string knownIPs, string expectedIp, int expectedPort)
         {
             using var host = new HostBuilder()
                 .ConfigureWebHost(webHostBuilder =>
@@ -229,7 +204,6 @@ namespace AspNetCore.ForwardedHttp.Tests
                         var options = new ForwardedHttpOptions
                         {
                             ForwardedHttp = ForwardedHttp.For,
-                            RequireHeaderSymmetry = requireSymmetry,
                             ForwardLimit = limit,
                         };
                         foreach (var ip in knownIPs.Split(',').Select(text => IPAddress.Parse(text)))
@@ -312,9 +286,6 @@ namespace AspNetCore.ForwardedHttp.Tests
             });
 
             Assert.Equal("testhost", context.Request.Host.ToString());
-            var feature = context.Features.Get<IForwardedHttpFeature>();
-            Assert.NotNull(feature);
-            Assert.Equal("originalhost", feature.Host);
         }
 
         public static TheoryData<string> HostHeaderData
@@ -757,136 +728,6 @@ namespace AspNetCore.ForwardedHttp.Tests
             Assert.True(assertsExecuted);
         }
 
-        [Theory]
-        [InlineData(0, "Proto=h1;For=::1;", "http")]
-        [InlineData(1, "For=::1", "http")]
-        [InlineData(1, "Proto=h1;For=::1", "h1")]
-        [InlineData(3, "Proto=h1;For=::1", "h1")]
-        [InlineData(3, "Proto=h2, Proto=h1;For=::1", "http")]
-        [InlineData(5, "Proto=h2, Proto=h1;For=::1, For=::1", "h2")]
-        [InlineData(10, "Proto=h3, Proto=h2, Proto=h1;For=::1, For=::1, For=::1", "h3")]
-        [InlineData(10, "Proto=h3, Proto=h2, Proto=h1;For=::1, For=badip, For=::1", "h1")]
-        public async Task ForwardedProtoOverrideLimitedByForwardedForCount(int limit, string forwardedHeader, string expected)
-        {
-            using var host = new HostBuilder()
-                .ConfigureWebHost(webHostBuilder =>
-                {
-                    webHostBuilder
-                    .UseTestServer()
-                    .Configure(app =>
-                    {
-                        app.UseForwardedHttp(new ForwardedHttpOptions
-                        {
-                            ForwardedHttp = ForwardedHttp.Proto | ForwardedHttp.For,
-                            RequireHeaderSymmetry = true,
-                            ForwardLimit = limit,
-                        });
-                    });
-                }).Build();
-
-            await host.StartAsync();
-
-            var server = host.GetTestServer();
-
-            var context = await server.SendAsync(c =>
-            {
-                c.Request.Headers["Forwarded"] = forwardedHeader;
-            });
-
-            Assert.Equal(expected, context.Request.Scheme);
-        }
-
-        [Theory]
-        [InlineData(0, "Proto=h1;For=::1", "http")]
-        [InlineData(1, "For=::1", "http")]
-        [InlineData(1, "Proto=h1", "h1")]
-        [InlineData(1, "Proto=h1;For=::1", "h1")]
-        [InlineData(3, "Proto=h1;For=::1", "h1")]
-        [InlineData(3, "Proto=h1;For=::1, ::1", "h1")]
-        [InlineData(3, "Proto=h2, Proto=h1;For=::1", "h2")]
-        [InlineData(5, "Proto=h2, Proto=h1;For=::1, ::1", "h2")]
-        [InlineData(10, "Proto=h3, Proto=h2, Proto=h1;For=::1, For=::1, For=::1", "h3")]
-        [InlineData(10, "Proto=h3, Proto=h2, Proto=h1;For=::1, For=badip, For=::1", "h1")]
-        public async Task ForwardedProtoOverrideCanBeIndependentOfForwardedForCount(int limit, string forwardedHeader, string expected)
-        {
-            using var host = new HostBuilder()
-                .ConfigureWebHost(webHostBuilder =>
-                {
-                    webHostBuilder
-                    .UseTestServer()
-                    .Configure(app =>
-                    {
-                        app.UseForwardedHttp(new ForwardedHttpOptions
-                        {
-                            ForwardedHttp = ForwardedHttp.Proto | ForwardedHttp.For,
-                            RequireHeaderSymmetry = false,
-                            ForwardLimit = limit,
-                        });
-                    });
-                }).Build();
-
-            await host.StartAsync();
-
-            var server = host.GetTestServer();
-
-            var context = await server.SendAsync(c =>
-            {
-                c.Request.Headers["Forwarded"] = forwardedHeader;
-            });
-
-            Assert.Equal(expected, context.Request.Scheme);
-        }
-
-        [Theory]
-        [InlineData("", "::1", false, "http")]
-        [InlineData("Proto=h1", "::1", false, "http")]
-        [InlineData("Proto=h1;For=F::", "::1", false, "h1")]
-        [InlineData("Proto=h1;For=F::", "E::", false, "h1")]
-        [InlineData("", "::1", true, "http")]
-        [InlineData("Proto=h1", "::1", true, "http")]
-        [InlineData("Proto=h1;For=F::", "::1", true, "h1")]
-        [InlineData("Proto=h1", "F::", true, "http")]
-        [InlineData("Proto=h1;For=E::", "F::", true, "http")]
-        [InlineData("Proto=h2, Proto=h1", "::1", true, "http")]
-        [InlineData("Proto=h2, Proto=h1;For=F::, For=D::", "::1", true, "h1")]
-        [InlineData("Proto=h2, Proto=h1;For=E::, For=D::", "F::", true, "http")]
-        public async Task ForwardedProtoOverrideLimitedByLoopback(string forwardedHeader, string remoteIp, bool loopback, string expected)
-        {
-            using var host = new HostBuilder()
-                .ConfigureWebHost(webHostBuilder =>
-                {
-                    webHostBuilder
-                    .UseTestServer()
-                    .Configure(app =>
-                    {
-                        var options = new ForwardedHttpOptions
-                        {
-                            ForwardedHttp = ForwardedHttp.Proto | ForwardedHttp.For,
-                            RequireHeaderSymmetry = true,
-                            ForwardLimit = 5,
-                        };
-                        if (!loopback)
-                        {
-                            options.KnownNetworks.Clear();
-                            options.KnownProxies.Clear();
-                        }
-                        app.UseForwardedHttp(options);
-                    });
-                }).Build();
-
-            await host.StartAsync();
-
-            var server = host.GetTestServer();
-
-            var context = await server.SendAsync(c =>
-            {
-                c.Request.Headers["Forwarded"] = forwardedHeader;
-                c.Connection.RemoteIpAddress = IPAddress.Parse(remoteIp);
-            });
-
-            Assert.Equal(expected, context.Request.Scheme);
-        }
-
         [Fact]
         public void AllForwardsDisabledByDefault()
         {
@@ -1042,8 +883,8 @@ namespace AspNetCore.ForwardedHttp.Tests
         }
 
         [Theory]
-        [InlineData(1, "Proto=httpa, Proto=httpb, Proto=httpc", "httpc", "Proto=httpa, Proto=httpb")]
-        [InlineData(2, "Proto=httpa, Proto=httpb, Proto=httpc", "httpb", "Proto=httpa")]
+        [InlineData(1, "Proto=httpa, Proto=httpb, Proto=httpc", "httpc", "proto=httpa, proto=httpb")]
+        [InlineData(2, "Proto=httpa, Proto=httpb, Proto=httpc", "httpb", "proto=httpa")]
         public async Task ForwardersWithDIOptionsRunsOnce(int limit, string forwardedHeader, string expectedScheme, string remainingHeader)
         {
             using var host = new HostBuilder()
@@ -1082,8 +923,8 @@ namespace AspNetCore.ForwardedHttp.Tests
         }
 
         [Theory]
-        [InlineData(1, "Proto=httpa, Proto=httpb, Proto=httpc", "httpb", "Proto=httpa")]
-        [InlineData(2, "Proto=httpa, Proto=httpb, Proto=httpc", "httpa", "")]
+        [InlineData(1, "Proto=httpa,Proto=httpb,Proto=httpc", "httpb", "proto=httpa")]
+        [InlineData(2, "Proto=httpa,Proto=httpb,Proto=httpc", "httpa", "")]
         public async Task ForwardersWithDirectOptionsRunsTwice(int limit, string forwardedHeader, string expectedScheme, string remainingHeader)
         {
             using var host = new HostBuilder()

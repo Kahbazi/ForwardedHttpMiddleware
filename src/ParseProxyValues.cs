@@ -31,6 +31,8 @@ namespace AspNetCore.ForwardedHttp
                 {
                     var proxyValue = proxyValues[m];
 
+                    proxyValue = proxyValue.TrimStart(' ');
+
                     var parameters = proxyValue.Split(";");
 
                     var forwardedValues = new ForwardedValues();
@@ -84,7 +86,7 @@ namespace AspNetCore.ForwardedHttp
 
         private static string StripQuotations(string value)
         {
-            if (value.Length == 0)
+            if (value.Length == 0 || value.Length == 1)
             {
                 return value;
             }
@@ -141,8 +143,10 @@ namespace AspNetCore.ForwardedHttp
                 {
                     builder.Append("proto=");
                     builder.Append(forwardedValue.Proto);
+                    builder.Append(";");
                 }
 
+                builder.Remove(builder.Length - 1, 1);
                 builder.Append(", ");
             }
 
