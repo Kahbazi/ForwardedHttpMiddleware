@@ -21,9 +21,10 @@ namespace AspNetCore.ForwardedHttp.Tests
             var value = new StringValues(headerValue);
 
             // Act
-            var parser = new ParseProxyValues(value);
+            var success = ParseProxyValues.TryParse(value, out var parser);
 
             // Assert
+            Assert.True(success);
             var firstProxy = Assert.Single(parser.ForwardedValues);
             Assert.Equal("11.11.11.11", firstProxy.For);
             Assert.Equal("101.101.101.101", firstProxy.By);
@@ -38,12 +39,13 @@ namespace AspNetCore.ForwardedHttp.Tests
             var value = new StringValues("for=11.11.11.11;by=101.101.101.101;proto=http;host=testhost,for=12.12.12.12;by=102.102.102.102;proto=https;host=testhost2");
 
             // Act
-            var parser = new ParseProxyValues(value);
+            var success = ParseProxyValues.TryParse(value, out var parser);
 
             // Assert
+            Assert.True(success);
             Assert.Equal(2, parser.ForwardedValues.Count);
 
-            var firstProxy = parser.ForwardedValues[0]; 
+            var firstProxy = parser.ForwardedValues[0];
             Assert.Equal("11.11.11.11", firstProxy.For);
             Assert.Equal("101.101.101.101", firstProxy.By);
             Assert.Equal("http", firstProxy.Proto);
@@ -67,9 +69,10 @@ namespace AspNetCore.ForwardedHttp.Tests
             });
 
             // Act
-            var parser = new ParseProxyValues(value);
+            var success = ParseProxyValues.TryParse(value, out var parser);
 
             // Assert
+            Assert.True(success);
             Assert.Equal(2, parser.ForwardedValues.Count);
 
             var firstProxy = parser.ForwardedValues[0];
@@ -96,9 +99,10 @@ namespace AspNetCore.ForwardedHttp.Tests
             });
 
             // Act
-            var parser = new ParseProxyValues(value);
+            var success = ParseProxyValues.TryParse(value, out var parser);
 
             // Assert
+            Assert.True(success);
             Assert.Equal(3, parser.ForwardedValues.Count);
 
             var firstProxy = parser.ForwardedValues[0];
@@ -131,9 +135,10 @@ namespace AspNetCore.ForwardedHttp.Tests
             });
 
             // Act
-            var parser = new ParseProxyValues(value);
+            var success = ParseProxyValues.TryParse(value, out var parser);
 
             // Assert
+            Assert.True(success);
             Assert.Equal(2, parser.ForwardedValues.Count);
 
             var firstProxy = parser.ForwardedValues[0];
@@ -156,9 +161,10 @@ namespace AspNetCore.ForwardedHttp.Tests
             var value = new StringValues("for=\"_something\"");
 
             // Act
-            var parser = new ParseProxyValues(value);
+            var success = ParseProxyValues.TryParse(value, out var parser);
 
             // Assert
+            Assert.True(success);
             var firstProxy = Assert.Single(parser.ForwardedValues);
             Assert.Equal("_something", firstProxy.For);
         }
@@ -173,15 +179,17 @@ namespace AspNetCore.ForwardedHttp.Tests
             // Arrange
             var value = new StringValues(headerValue);
 
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new ParseProxyValues(value));
+            // Assert
+            var success = ParseProxyValues.TryParse(value, out var parser);
+
+            Assert.False(success);
         }
 
         [Fact]
         public void NoProxyCreateHeader()
         {
             // Arrange
-            var parser = new ParseProxyValues(StringValues.Empty);;
+            var parser = new ParseProxyValues();
 
             // Act
             var headerValue = parser.Value;
@@ -194,16 +202,17 @@ namespace AspNetCore.ForwardedHttp.Tests
         public void SingleProxyCreateHeader()
         {
             // Arrange
-            var parser = new ParseProxyValues(StringValues.Empty);
-
-            parser.ForwardedValues = new List<ForwardedValues>
+            var parser = new ParseProxyValues
             {
-                new ForwardedValues
+                ForwardedValues = new List<ForwardedValues>
                 {
-                    For = "11.11.11.11",
-                    By = "101.101.101.101",
-                    Host = "testhost",
-                    Proto = "https",
+                    new ForwardedValues
+                    {
+                        For = "11.11.11.11",
+                        By = "101.101.101.101",
+                        Host = "testhost",
+                        Proto = "https",
+                    }
                 }
             };
 
@@ -219,23 +228,24 @@ namespace AspNetCore.ForwardedHttp.Tests
         public void TwoProxiesCreateHeader()
         {
             // Arrange
-            var parser = new ParseProxyValues(StringValues.Empty);
-
-            parser.ForwardedValues = new List<ForwardedValues>
+            var parser = new ParseProxyValues
             {
-                new ForwardedValues
+                ForwardedValues = new List<ForwardedValues>
                 {
-                    For = "11.11.11.11",
-                    By = "101.101.101.101",
-                    Host = "testhost",
-                    Proto = "https",
-                },
-                new ForwardedValues
-                {
-                    For = "12.12.12.12",
-                    By = "102.102.102.102",
-                    Host = "testhost2",
-                    Proto = "https",
+                    new ForwardedValues
+                    {
+                        For = "11.11.11.11",
+                        By = "101.101.101.101",
+                        Host = "testhost",
+                        Proto = "https",
+                    },
+                    new ForwardedValues
+                    {
+                        For = "12.12.12.12",
+                        By = "102.102.102.102",
+                        Host = "testhost2",
+                        Proto = "https",
+                    }
                 }
             };
 

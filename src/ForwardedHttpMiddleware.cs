@@ -14,6 +14,7 @@ namespace AspNetCore.ForwardedHttp
 {
     public class ForwardedHttpMiddleware
     {
+        private const string ForwardedHeader = "Forwarded";
         private static readonly bool[] HostCharValidity = new bool[127];
         private static readonly bool[] SchemeCharValidity = new bool[123];
         private static readonly bool[] NodeCharValidity = new bool[123];
@@ -125,8 +126,13 @@ namespace AspNetCore.ForwardedHttp
             var checkHost = _options.ForwardedHttp.HasFlag(ForwardedHttp.Host);
 
             var request = context.Request;
-            var forwarded = request.Headers["Forwarded"];
-            var forwardedHeader = new ParseProxyValues(forwarded);
+            var forwarded = request.Headers[ForwardedHeader];
+            var success = ParseProxyValues.TryParse(forwarded, out var forwardedHeader);
+            if (!success)
+            {
+                _logger.LogWarning("Invalid forwarded header");
+                return;
+            }
 
             var entryCount = forwardedHeader.ForwardedValues.Count;
 
@@ -199,7 +205,7 @@ namespace AspNetCore.ForwardedHttp
                         currentValues.RemoteIpAndPort = set.RemoteIpAndPort;
                         currentValues.ForType = NodeType.Unknown;
                     }
-                    else if (!string.IsNullOrEmpty(set.RemoteIpAndPortText))
+                    else if (!StringSegment.IsNullOrEmpty(set.RemoteIpAndPortText))
                     {
                         // Stop at the first unparsable IP, but still apply changes processed so far.
                         _logger.LogDebug(1, "Unparsable IP: {IpAndPortText}", set.RemoteIpAndPortText);
@@ -233,7 +239,7 @@ namespace AspNetCore.ForwardedHttp
                         currentValues.LocalIpAndPort = set.LocalIpAndPort;
                         currentValues.ForType = NodeType.Unknown;
                     }
-                    else if (!string.IsNullOrEmpty(set.LocalIpAndPortText))
+                    else if (!StringSegment.IsNullOrEmpty(set.LocalIpAndPortText))
                     {
                         // Stop at the first unparsable IP, but still apply changes processed so far.
                         _logger.LogDebug(1, "Unparsable IP: {IpAndPortText}", set.LocalIpAndPortText);
@@ -243,7 +249,7 @@ namespace AspNetCore.ForwardedHttp
 
                 if (checkProto)
                 {
-                    if (!string.IsNullOrEmpty(set.Scheme) && TryValidateScheme(set.Scheme))
+                    if (!StringSegment.IsNullOrEmpty(set.Scheme) && TryValidateScheme(set.Scheme))
                     {
                         applyChanges = true;
                         currentValues.Scheme = set.Scheme;
@@ -252,7 +258,7 @@ namespace AspNetCore.ForwardedHttp
 
                 if (checkHost)
                 {
-                    if (!string.IsNullOrEmpty(set.Host) && TryValidateHost(set.Host)
+                    if (!StringSegment.IsNullOrEmpty(set.Host) && TryValidateHost(set.Host)
                         && (_allowAllHosts || HostString.MatchesAny(set.Host, _allowedHosts)))
                     {
                         applyChanges = true;
@@ -265,13 +271,14 @@ namespace AspNetCore.ForwardedHttp
             {
                 var feature = new ForwardedHttpFeature();
 
-                if (checkFor && !string.IsNullOrEmpty(currentValues.RemoteIpAndPortText))
+                if (checkFor && !StringSegment.IsNullOrEmpty(currentValues.RemoteIpAndPortText))
                 {
                     if (connection.RemoteIpAddress != null)
                     {
-                        // Save the original
-                        // WHERE!? In a header? in another feature?
+                        feature.OriginalRemoteIpAddress = connection.RemoteIpAddress;
                     }
+
+                    feature.OriginalRemotePort = connection.RemotePort;
 
                     if (currentValues.ForType == NodeType.IP)
                     {
@@ -286,14 +293,14 @@ namespace AspNetCore.ForwardedHttp
                     }
                     
                     feature.ForType = currentValues.ForType;
-                    feature.For = currentValues.RemoteIpAndPortText;
+                    feature.For = currentValues.RemoteIpAndPortText.ToString();
                 }
 
                 if (checkBy && currentValues.LocalIpAndPort != null)
                 {
                     if (connection.LocalIpAddress != null)
                     {
-                        // Save the original??
+                        feature.OriginalBy = connection.LocalIpAddress;
                     }
 
                     connection.LocalIpAddress = currentValues.LocalIpAndPort.Address;
@@ -302,16 +309,16 @@ namespace AspNetCore.ForwardedHttp
 
                 if (checkProto && currentValues.Scheme != null)
                 {
-                    // Save the original??
+                    feature.OriginalProto = request.Scheme;
 
-                    request.Scheme = currentValues.Scheme;
+                    request.Scheme = currentValues.Scheme.ToString();
                 }
 
                 if (checkHost && currentValues.Host != null)
                 {
-                    // Save the original??
+                    feature.OriginalHost = request.Host.Value;
 
-                    request.Host = HostString.FromUriComponent(currentValues.Host);
+                    request.Host = HostString.FromUriComponent(currentValues.Host.ToString());
                 }
 
                 context.Features.Set<IForwardedHttpFeature>(feature);
@@ -327,29 +334,35 @@ namespace AspNetCore.ForwardedHttp
                     forwardedHeader.ForwardedValues.Clear();
                 }
 
-                request.Headers.Remove("Forwarded");
+                request.Headers.Remove(ForwardedHeader);
 
                 var value = forwardedHeader.Value;
                 if (value != StringValues.Empty)
                 {
-                    request.Headers.Add("Forwarded", value);
+                    request.Headers.Add(ForwardedHeader, value);
                 }
             }
         }
 
-        private bool IsValidObfuscatedNode(string remoteIpAndPortText)
+        private bool IsValidObfuscatedNode(StringSegment remoteIpAndPortText)
         {
+            if (remoteIpAndPortText[0] != '_')
+            { 
+                return false;
+            }
+
             return false;
         }
 
-        private bool IsUnknownNode(string remoteIpAndPortText)
+        private bool IsUnknownNode(StringSegment remoteIpAndPortText)
         {
-            return false;
+            // Need any string comparision?
+            return remoteIpAndPortText.Equals("unknown");
         }
 
         // Empty was checked for by the caller
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool TryValidateScheme(string scheme)
+        private bool TryValidateScheme(StringSegment scheme)
         {
             for (var i = 0; i < scheme.Length; i++)
             {
@@ -369,7 +382,7 @@ namespace AspNetCore.ForwardedHttp
 
         // Empty was checked for by the caller
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool TryValidateHost(string host)
+        private bool TryValidateHost(StringSegment host)
         {
             if (host[0] == '[')
             {
@@ -401,7 +414,7 @@ namespace AspNetCore.ForwardedHttp
 
         // The lead '[' was already checked
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool TryValidateIPv6Host(string hostText)
+        private bool TryValidateIPv6Host(StringSegment hostText)
         {
             for (var i = 1; i < hostText.Length; i++)
             {
@@ -427,7 +440,7 @@ namespace AspNetCore.ForwardedHttp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool TryValidateHostPort(string hostText, int offset)
+        private bool TryValidateHostPort(StringSegment hostText, int offset)
         {
             if (offset == hostText.Length)
             {
@@ -493,15 +506,15 @@ namespace AspNetCore.ForwardedHttp
         private struct SetOfForwarders
         {
             public NodeType ForType;
-            public string RemoteIpAndPortText;
+            public StringSegment RemoteIpAndPortText;
             public IPEndPoint RemoteIpAndPort;
 
             public NodeType ByType;
-            public string LocalIpAndPortText;
+            public StringSegment LocalIpAndPortText;
             public IPEndPoint LocalIpAndPort;
 
-            public string Host;
-            public string Scheme;
+            public StringSegment Host;
+            public StringSegment Scheme;
         }
     }
 }

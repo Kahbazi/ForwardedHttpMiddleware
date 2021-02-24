@@ -46,7 +46,10 @@ namespace AspNetCore.ForwardedHttp.Tests
             Assert.Equal("11.111.111.11", context.Connection.RemoteIpAddress.ToString());
             Assert.Equal(9090, context.Connection.RemotePort);
             // No Original set if RemoteIpAddress started null.
-            Assert.Equal(NodeType.IP, context.Features.Get<IForwardedHttpFeature>().ForType);
+            var feature = context.Features.Get<IForwardedHttpFeature>();
+            Assert.NotNull(feature);
+            Assert.Null(feature.OriginalRemoteIpAddress);
+            Assert.Equal(NodeType.IP, feature.ForType);
             // Should have been consumed and removed
             Assert.False(context.Request.Headers.ContainsKey("Forwarded"));
         }
@@ -129,6 +132,10 @@ namespace AspNetCore.ForwardedHttp.Tests
                 c.Connection.RemotePort = 99;
             });
 
+            var feature = context.Features.Get<IForwardedHttpFeature>();
+            Assert.NotNull(feature);
+            Assert.Equal(IPAddress.Parse("10.0.0.1"), feature.OriginalRemoteIpAddress);
+            Assert.Equal(99, feature.OriginalRemotePort);
             Assert.Equal(expectedIp, context.Connection.RemoteIpAddress.ToString());
             Assert.Equal(expectedPort, context.Connection.RemotePort);
             Assert.Equal(remainingHeader, context.Request.Headers["Forwarded"].ToString());
@@ -286,6 +293,9 @@ namespace AspNetCore.ForwardedHttp.Tests
             });
 
             Assert.Equal("testhost", context.Request.Host.ToString());
+            var feature = context.Features.Get<IForwardedHttpFeature>();
+            Assert.NotNull(feature);
+            Assert.Equal("originalhost", feature.OriginalHost);
         }
 
         public static TheoryData<string> HostHeaderData

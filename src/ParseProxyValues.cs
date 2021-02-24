@@ -1,90 +1,111 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Extensions.Primitives;
 
 namespace AspNetCore.ForwardedHttp
 {
     public class ForwardedValues
     {
-        public string For { get; set; }
-        public string By { get; set; }
-        public string Host { get; set; }
-        public string Proto { get; set; }
+        public StringSegment For { get; set; }
+        public StringSegment By { get; set; }
+        public StringSegment Host { get; set; }
+        public StringSegment Proto { get; set; }
     }
 
-    //TODO: Need more efficient implementation
     public class ParseProxyValues
     {
-        public ParseProxyValues(StringValues values)
+        private static readonly char[] CommaChar = new[] { ',' };
+        private static readonly char[] SemiColonChar = new[] { ';' };
+
+        public ParseProxyValues()
         {
+
+        }
+
+        public static bool TryParse(StringValues values, out ParseProxyValues parseProxyValues)
+        {
+            parseProxyValues = null;
+
             for (var i = 0; i < values.Count; i++)
             {
                 var value = values[i];
 
-                var proxyValues = value.Split(',');
+                var valueSegment = new StringSegment(value);
 
-                for (int m = 0; m < proxyValues.Length; m++)
+                var proxyValues = valueSegment.Split(CommaChar);
+
+                foreach (var proxyValue in proxyValues)
                 {
-                    var proxyValue = proxyValues[m];
+                    var trimmedProxyValue = proxyValue.TrimStart();
 
-                    proxyValue = proxyValue.TrimStart(' ');
+                    var parameters = trimmedProxyValue.Split(SemiColonChar);
 
-                    var parameters = proxyValue.Split(";");
+                    ForwardedValues forwardedValues = null;
 
-                    var forwardedValues = new ForwardedValues();
-
-                    for (int z = 0; z < parameters.Length; z++)
+                    foreach (var parameter in parameters)
                     {
-                        var parameter = parameters[z];
-
                         if (parameter.StartsWith("for=", StringComparison.InvariantCultureIgnoreCase))
                         {
-                            if (forwardedValues.For != null)
+                            if (!StringSegment.IsNullOrEmpty(forwardedValues?.For ?? StringSegment.Empty))
                             {
-                                throw new ArgumentException(nameof(values));
+                                return false;
                             }
 
-                            forwardedValues.For = StripQuotations(parameter.Remove(0, "for=".Length));
+                            forwardedValues ??= new ForwardedValues();
+
+                            forwardedValues.For = StripQuotations(parameter.Subsegment("for=".Length));
                         }
                         else if (parameter.StartsWith("by=", StringComparison.InvariantCultureIgnoreCase))
                         {
-                            if (forwardedValues.By != null)
+                            if (!StringSegment.IsNullOrEmpty(forwardedValues?.By ?? StringSegment.Empty))
                             {
-                                throw new ArgumentException(nameof(values));
+                                return false;
                             }
 
-                            forwardedValues.By = StripQuotations(parameter.Remove(0, "by=".Length));
+                            forwardedValues ??= new ForwardedValues();
+
+                            forwardedValues.By = StripQuotations(parameter.Subsegment("by=".Length));
                         }
                         else if (parameter.StartsWith("host=", StringComparison.InvariantCultureIgnoreCase))
                         {
-                            if (forwardedValues.Host != null)
+                            if (!StringSegment.IsNullOrEmpty(forwardedValues?.Host ?? StringSegment.Empty))
                             {
-                                throw new ArgumentException(nameof(values));
+                                return false;
                             }
 
-                            forwardedValues.Host = StripQuotations(parameter.Remove(0, "host=".Length));
+                            forwardedValues ??= new ForwardedValues();
+
+                            forwardedValues.Host = StripQuotations(parameter.Subsegment("host=".Length));
                         }
                         else if (parameter.StartsWith("proto=", StringComparison.InvariantCultureIgnoreCase))
                         {
-                            if (forwardedValues.Proto != null)
+                            if (!StringSegment.IsNullOrEmpty(forwardedValues?.Proto ?? StringSegment.Empty))
                             {
-                                throw new ArgumentException(nameof(values));
+                                return false;
                             }
 
-                            forwardedValues.Proto = StripQuotations(parameter.Remove(0, "proto=".Length));
+                            forwardedValues ??= new ForwardedValues();
+
+                            forwardedValues.Proto = StripQuotations(parameter.Subsegment("proto=".Length));
                         }
                     }
 
-                    ForwardedValues.Add(forwardedValues);
+                    if (forwardedValues == null)
+                    {
+                        return false;
+                    }
+
+                    parseProxyValues ??= new ParseProxyValues();
+
+                    parseProxyValues.ForwardedValues.Add(forwardedValues);
                 }
             }
+
+            return true;
         }
 
-        private static string StripQuotations(string value)
+        private static StringSegment StripQuotations(StringSegment value)
         {
             if (value.Length == 0 || value.Length == 1)
             {
@@ -93,7 +114,7 @@ namespace AspNetCore.ForwardedHttp
 
             if (value[0] == '\"' && value[^1] == '\"')
             {
-                return value[1..^1];
+                return value.Subsegment(1, value.Length - 2);
             }
             else
             {
@@ -121,28 +142,28 @@ namespace AspNetCore.ForwardedHttp
                 if (forwardedValue.For != null)
                 {
                     builder.Append("for=");
-                    builder.Append(forwardedValue.For);
+                    builder.Append((ReadOnlySpan<char>)forwardedValue.For);
                     builder.Append(";");
                 }
 
                 if (forwardedValue.By != null)
                 {
                     builder.Append("by=");
-                    builder.Append(forwardedValue.By);
+                    builder.Append((ReadOnlySpan<char>)forwardedValue.By);
                     builder.Append(";");
                 }
 
                 if (forwardedValue.Host != null)
                 {
                     builder.Append("host=");
-                    builder.Append(forwardedValue.Host);
+                    builder.Append((ReadOnlySpan<char>)forwardedValue.Host);
                     builder.Append(";");
                 }
 
                 if (forwardedValue.Proto != null)
                 {
                     builder.Append("proto=");
-                    builder.Append(forwardedValue.Proto);
+                    builder.Append((ReadOnlySpan<char>)forwardedValue.Proto);
                     builder.Append(";");
                 }
 

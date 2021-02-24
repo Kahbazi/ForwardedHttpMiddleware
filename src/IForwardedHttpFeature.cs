@@ -1,17 +1,29 @@
-﻿namespace AspNetCore.ForwardedHttp
+﻿using System.Net;
+
+namespace AspNetCore.ForwardedHttp
 {
     public interface IForwardedHttpFeature
     {
-        public NodeType ForType { get; }
-       
-        public string For { get; }
-
-        public NodeType ByType { get; }
-
-        public string By { get; }
-
-        public string Host { get; }
+        IPAddress OriginalRemoteIpAddress { get; set; }
         
-        public string Proto { get; }
+        int OriginalRemotePort { get; set; }
+
+        IPAddress OriginalBy { get; set; }
+        
+        string OriginalHost { get; set; }
+        
+        string OriginalProto { get; set; }
+
+        NodeType ForType { get; }
+       
+        string For { get; }
+
+        NodeType ByType { get; }
+
+        string By { get; }
+
+        string Host { get; }
+        
+        string Proto { get; }
     }
 }
