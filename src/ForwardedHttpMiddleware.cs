@@ -17,7 +17,7 @@ namespace AspNetCore.ForwardedHttp
         private const string ForwardedHeader = "Forwarded";
         private static readonly bool[] HostCharValidity = new bool[127];
         private static readonly bool[] SchemeCharValidity = new bool[123];
-        private static readonly bool[] NodeCharValidity = new bool[123];
+        private static readonly bool[] ObfuscatedCharValidity = new bool[123];
 
         private readonly RequestDelegate _next;
         private readonly ILogger<ForwardedHttpMiddleware> _logger;
@@ -28,9 +28,9 @@ namespace AspNetCore.ForwardedHttp
         static ForwardedHttpMiddleware()
         {
             // RFC 7239 obfnode = 1*( ALPHA / DIGIT / "." / "_" / "-")
-            NodeCharValidity['_'] = true;
-            NodeCharValidity['-'] = true;
-            NodeCharValidity['.'] = true;
+            ObfuscatedCharValidity['_'] = true;
+            ObfuscatedCharValidity['-'] = true;
+            ObfuscatedCharValidity['.'] = true;
 
             // RFC 3986 scheme = ALPHA * (ALPHA / DIGIT / "+" / "-" / ".")
             SchemeCharValidity['+'] = true;
@@ -53,16 +53,19 @@ namespace AspNetCore.ForwardedHttp
             {
                 SchemeCharValidity[ch] = true;
                 HostCharValidity[ch] = true;
+                ObfuscatedCharValidity[ch] = true;
             }
             for (var ch = 'A'; ch <= 'Z'; ch++)
             {
                 SchemeCharValidity[ch] = true;
                 HostCharValidity[ch] = true;
+                ObfuscatedCharValidity[ch] = true;
             }
             for (var ch = 'a'; ch <= 'z'; ch++)
             {
                 SchemeCharValidity[ch] = true;
                 HostCharValidity[ch] = true;
+                ObfuscatedCharValidity[ch] = true;
             }
         }
 
@@ -690,14 +693,22 @@ namespace AspNetCore.ForwardedHttp
             return (ip, port);
         }
 
-        private bool IsValidObfuscatedNode(StringSegment remoteIpAndPortText)
+        private bool IsValidObfuscatedNode(StringSegment ipAndPortText)
         {
-            if (remoteIpAndPortText[0] != '_')
+            if (ipAndPortText[0] != '_')
             {
                 return false;
             }
 
-            return false;
+            for (var i = 1; i < ipAndPortText.Length; i++)
+            {
+                if (!IsValidObfuscatedChar(ipAndPortText[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private bool IsUnknownNode(StringSegment remoteIpAndPortText)
@@ -756,6 +767,12 @@ namespace AspNetCore.ForwardedHttp
         private static bool IsValidHostChar(char ch)
         {
             return ch < HostCharValidity.Length && HostCharValidity[ch];
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsValidObfuscatedChar(char ch)
+        {
+            return ch < ObfuscatedCharValidity.Length && ObfuscatedCharValidity[ch];
         }
 
         // The lead '[' was already checked
