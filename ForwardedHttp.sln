@@ -9,11 +9,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AspNetCore.ForwardedHeader"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{3C44BDA9-AC74-470E-968C-2B9B42DEC4FE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sample", "samples\Sample\Sample.csproj", "{E7EE672F-61A7-4855-9C09-FEE358B61B08}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sample", "samples\Sample\Sample.csproj", "{E7EE672F-61A7-4855-9C09-FEE358B61B08}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{38A46145-ADB4-4A90-A65B-87FA2D987009}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspNetCore.ForwardedHeader.Tests", "test\AspNetCore.ForwardedHeader.Tests\AspNetCore.ForwardedHeader.Tests.csproj", "{DF337B75-10F6-41BA-AB0D-6046A64AD632}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AspNetCore.ForwardedHttp.Tests", "test\AspNetCore.ForwardedHeader.Tests\AspNetCore.ForwardedHttp.Tests.csproj", "{DF337B75-10F6-41BA-AB0D-6046A64AD632}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

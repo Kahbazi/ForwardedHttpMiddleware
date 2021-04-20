@@ -42,6 +42,6 @@ namespace AspNetCore.ForwardedHttp
         /// <summary>
         /// Identifies which forwarders should be processed.
         /// </summary>
-        public ForwardedHttp ForwardedHttp { get; set; } = ForwardedHttp.All;
+        public ForwardedHttp ForwardedHttp { get; set; } = ForwardedHttp.None;
     }
 }

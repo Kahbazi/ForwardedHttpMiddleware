@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Xunit;
 
-namespace AspNetCore.ForwardedHeader.Tests
+namespace AspNetCore.ForwardedHttp.Tests
 {
     public class AppBuilderExtensionsTest
     {
