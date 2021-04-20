@@ -49,9 +49,6 @@ namespace AspNetCore.ForwardedHttp.Tests
             var feature = context.Features.Get<IForwardedHttpFeature>();
             Assert.NotNull(feature);
             Assert.Null(feature.OriginalRemoteIpAddress);
-            Assert.Equal(NodeType.IpAndPort, feature.ForType);
-            // Should have been consumed and removed
-            Assert.False(context.Request.Headers.ContainsKey("Forwarded"));
         }
 
         [Theory]
@@ -86,22 +83,21 @@ namespace AspNetCore.ForwardedHttp.Tests
 
             Assert.Equal(expectedIp, context.Connection.RemoteIpAddress.ToString());
             Assert.Equal(expectedPort, context.Connection.RemotePort);
-            Assert.Null(context.Features.Get<IForwardedHttpFeature>());
             Assert.True(context.Request.Headers.ContainsKey("Forwarded"));
             Assert.Equal(forwardedHeader, context.Request.Headers["Forwarded"]);
         }
 
         [Theory]
-        [InlineData(1, "For=11.111.111.11:12345", "11.111.111.11", 12345, "")]
-        [InlineData(10, "For=11.111.111.11:12345", "11.111.111.11", 12345, "")]
-        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "for=12.112.112.12:23456")]
-        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "")]
-        [InlineData(10, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "")]
-        [InlineData(10, "For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "for=12.112.112.12.23456")] // Invalid 2nd value
-        [InlineData(10, "For=13.113.113.13:34567, For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345, "for=13.113.113.13:34567, for=12.112.112.12.23456")] // Invalid 2nd value
-        [InlineData(2, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456, "for=13.113.113.13:34567")]
-        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "13.113.113.13", 34567, "")]
-        public async Task ForwardedForForwardLimit(int limit, string forwardedHeader, string expectedIp, int expectedPort, string remainingHeader)
+        [InlineData(1, "For=11.111.111.11:12345", "11.111.111.11", 12345)]
+        [InlineData(10, "For=11.111.111.11:12345", "11.111.111.11", 12345)]
+        [InlineData(1, "For=12.112.112.12:23456, For=11.111.111.11:12345", "11.111.111.11", 12345)]
+        [InlineData(2, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456)]
+        [InlineData(10, "For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456)]
+        [InlineData(10, "For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345)] // Invalid 2nd value
+        [InlineData(10, "For=13.113.113.13:34567, For=12.112.112.12.23456, For=11.111.111.11:12345", "11.111.111.11", 12345)] // Invalid 2nd value
+        [InlineData(2, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "12.112.112.12", 23456)]
+        [InlineData(3, "For=13.113.113.13:34567, For=12.112.112.12:23456, For=11.111.111.11:12345", "13.113.113.13", 34567)]
+        public async Task ForwardedForForwardLimit(int limit, string forwardedHeader, string expectedIp, int expectedPort)
         {
             using var host = new HostBuilder()
                 .ConfigureWebHost(webHostBuilder =>
@@ -138,7 +134,6 @@ namespace AspNetCore.ForwardedHttp.Tests
             Assert.Equal(99, feature.OriginalRemotePort);
             Assert.Equal(expectedIp, context.Connection.RemoteIpAddress.ToString());
             Assert.Equal(expectedPort, context.Connection.RemotePort);
-            Assert.Equal(remainingHeader, context.Request.Headers["Forwarded"].ToString());
         }
 
         [Theory]
@@ -183,7 +178,6 @@ namespace AspNetCore.ForwardedHttp.Tests
             {
                 Assert.Equal(originalIp, context.Connection.RemoteIpAddress.ToString());
                 Assert.Equal(99, context.Connection.RemotePort);
-                Assert.Null(context.Features.Get<IForwardedHttpFeature>());
             }
         }
 
@@ -893,9 +887,9 @@ namespace AspNetCore.ForwardedHttp.Tests
         }
 
         [Theory]
-        [InlineData(1, "Proto=httpa, Proto=httpb, Proto=httpc", "httpc", "proto=httpa, proto=httpb")]
-        [InlineData(2, "Proto=httpa, Proto=httpb, Proto=httpc", "httpb", "proto=httpa")]
-        public async Task ForwardersWithDIOptionsRunsOnce(int limit, string forwardedHeader, string expectedScheme, string remainingHeader)
+        [InlineData(1, "Proto=httpa, Proto=httpb, Proto=httpc", "httpc")]
+        [InlineData(2, "Proto=httpa, Proto=httpb, Proto=httpc", "httpb")]
+        public async Task ForwardersWithDIOptionsRunsOnce(int limit, string forwardedHeader, string expectedScheme)
         {
             using var host = new HostBuilder()
                 .ConfigureWebHost(webHostBuilder =>
@@ -929,44 +923,6 @@ namespace AspNetCore.ForwardedHttp.Tests
             });
 
             Assert.Equal(expectedScheme, context.Request.Scheme);
-            Assert.Equal(remainingHeader, context.Request.Headers["Forwarded"].ToString());
-        }
-
-        [Theory]
-        [InlineData(1, "Proto=httpa,Proto=httpb,Proto=httpc", "httpb", "proto=httpa")]
-        [InlineData(2, "Proto=httpa,Proto=httpb,Proto=httpc", "httpa", "")]
-        public async Task ForwardersWithDirectOptionsRunsTwice(int limit, string forwardedHeader, string expectedScheme, string remainingHeader)
-        {
-            using var host = new HostBuilder()
-                .ConfigureWebHost(webHostBuilder =>
-                {
-                    webHostBuilder
-                    .UseTestServer()
-                    .Configure(app =>
-                    {
-                        var options = new ForwardedHttpOptions
-                        {
-                            ForwardedHttp = ForwardedHttp.Proto,
-                            ForwardLimit = limit,
-                        };
-                        options.KnownProxies.Clear();
-                        options.KnownNetworks.Clear();
-                        app.UseForwardedHttp(options);
-                        app.UseForwardedHttp(options);
-                    });
-                }).Build();
-
-            await host.StartAsync();
-
-            var server = host.GetTestServer();
-
-            var context = await server.SendAsync(c =>
-            {
-                c.Request.Headers["Forwarded"] = forwardedHeader;
-            });
-
-            Assert.Equal(expectedScheme, context.Request.Scheme);
-            Assert.Equal(remainingHeader, context.Request.Headers["Forwarded"].ToString());
         }
     }
 }

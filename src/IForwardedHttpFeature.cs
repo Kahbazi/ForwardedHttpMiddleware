@@ -4,26 +4,16 @@ namespace AspNetCore.ForwardedHttp
 {
     public interface IForwardedHttpFeature
     {
-        IPAddress OriginalRemoteIpAddress { get; set; }
-        
-        int OriginalRemotePort { get; set; }
+        public IPAddress OriginalRemoteIpAddress { get; }
 
-        IPAddress OriginalBy { get; set; }
-        
-        string OriginalHost { get; set; }
-        
-        string OriginalProto { get; set; }
+        public int OriginalRemotePort { get; }
 
-        NodeType ForType { get; }
-       
-        string For { get; }
+        public IPAddress OriginalLocalIpAddress { get; }
 
-        NodeType ByType { get; }
+        public int OriginalLocalPort { get; }
 
-        string By { get; }
+        public string OriginalHost { get; }
 
-        string Host { get; }
-        
-        string Proto { get; }
+        public string OriginalProto { get; }
     }
 }

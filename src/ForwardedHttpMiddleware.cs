@@ -120,6 +120,8 @@ namespace AspNetCore.ForwardedHttp
 
         private void ApplyForwarders(HttpContext context)
         {
+            StoreOriginalValues(context);
+
             var checkFor = _options.ForwardedHttp.HasFlag(ForwardedHttp.For);
             var checkBy = _options.ForwardedHttp.HasFlag(ForwardedHttp.By);
             var checkProto = _options.ForwardedHttp.HasFlag(ForwardedHttp.Proto);
@@ -497,130 +499,140 @@ namespace AspNetCore.ForwardedHttp
 
                 if (checkProto)
                 {
-                    if (!StringSegment.IsNullOrEmpty(set.Scheme) && TryValidateScheme(set.Scheme))
+                    if (!StringSegment.IsNullOrEmpty(set.Scheme))
                     {
-                        applyChanges = true;
-                        currentValues.Scheme = set.Scheme;
+                        if (TryValidateScheme(set.Scheme))
+                        {
+                            applyChanges = true;
+                            currentValues.Scheme = set.Scheme;
+                        }
+                        else
+                        {
+                            // Stop at the first invalid scheme, but still apply changes processed so far.
+                            _logger.LogDebug(1, "invalid scheme: {scheme}", set.Scheme);
+                            break;
+                        }
                     }
                 }
 
                 if (checkHost)
                 {
-                    if (!StringSegment.IsNullOrEmpty(set.Host) && TryValidateHost(set.Host)
-                        && (_allowAllHosts || HostString.MatchesAny(set.Host, _allowedHosts)))
+                    if (!StringSegment.IsNullOrEmpty(set.Host))
                     {
-                        applyChanges = true;
-                        currentValues.Host = set.Host;
+                        if (!TryValidateHost(set.Host))
+                        {
+                            // Stop at the first invalid host, but still apply changes processed so far.
+                            _logger.LogDebug(1, "invalid host: {scheme}", set.Host);
+                            break;
+                        }
+                        else
+                        {
+                            if (!_allowAllHosts && !HostString.MatchesAny(set.Host, _allowedHosts))
+                            {
+                                // Stop at the first invalid host, but still apply changes processed so far.
+                                _logger.LogDebug(1, "host not allowed: {host}", set.Host);
+                                break;
+                            }
+                            else
+                            {
+                                applyChanges = true;
+                                currentValues.Host = set.Host;
+                            }
+                        }
+                    }
+                }
+
+                if (applyChanges)
+                {
+                    if (checkFor && !StringSegment.IsNullOrEmpty(currentValues.RemoteIpAndPortText))
+                    {
+                        if (currentValues.ForType == NodeType.Ip
+                            || currentValues.ForType == NodeType.IpAndObfuscatedPort
+                            || currentValues.ForType == NodeType.IpAndPort)
+                        {
+                            connection.RemoteIpAddress = currentValues.RemoteIp;
+                        }
+                        else
+                        {
+                            connection.RemoteIpAddress = null;
+                        }
+
+                        if (currentValues.ForType == NodeType.UnknownAndPort
+                            || currentValues.ForType == NodeType.ObfuscatedAndPort
+                            || currentValues.ForType == NodeType.IpAndPort)
+                        {
+                            connection.RemotePort = currentValues.RemotePort;
+                        }
+                        else
+                        {
+                            connection.RemotePort = 0;
+                        }
+                    }
+
+                    if (checkBy && !StringSegment.IsNullOrEmpty(currentValues.LocalIpAndPortText))
+                    {
+                        if (currentValues.ByType == NodeType.Ip
+                            || currentValues.ByType == NodeType.IpAndObfuscatedPort
+                            || currentValues.ByType == NodeType.IpAndPort)
+                        {
+                            connection.LocalIpAddress = currentValues.LocalIp;
+                        }
+                        else
+                        {
+                            connection.LocalIpAddress = null;
+                        }
+
+                        if (currentValues.ByType == NodeType.UnknownAndPort
+                            || currentValues.ByType == NodeType.ObfuscatedAndPort
+                            || currentValues.ByType == NodeType.IpAndPort)
+                        {
+                            connection.LocalPort = currentValues.LocalPort;
+                        }
+                        else
+                        {
+                            connection.LocalPort = 0;
+                        }
+                    }
+
+                    if (checkProto && currentValues.Scheme != null)
+                    {
+                        request.Scheme = currentValues.Scheme.ToString();
+                    }
+
+                    if (checkHost && currentValues.Host != null)
+                    {
+                        request.Host = HostString.FromUriComponent(currentValues.Host.ToString());
                     }
                 }
             }
+        }
 
-            if (applyChanges)
+        private static void StoreOriginalValues(HttpContext context)
+        {
+            var connection = context.Connection;
+
+            var feature = new ForwardedHttpFeature();
+            if (connection.LocalIpAddress != null)
             {
-                var feature = new ForwardedHttpFeature();
-
-                if (checkFor && !StringSegment.IsNullOrEmpty(currentValues.RemoteIpAndPortText))
-                {
-                    if (connection.RemoteIpAddress != null)
-                    {
-                        feature.OriginalRemoteIpAddress = connection.RemoteIpAddress;
-                    }
-
-                    feature.OriginalRemotePort = connection.RemotePort;
-
-                    if (currentValues.ForType == NodeType.Ip
-                        || currentValues.ForType == NodeType.IpAndObfuscatedPort
-                        || currentValues.ForType == NodeType.IpAndPort)
-                    {
-                        connection.RemoteIpAddress = currentValues.RemoteIp;
-                    }
-                    else
-                    {
-                        connection.RemoteIpAddress = null;
-                    }
-
-                    if (currentValues.ForType == NodeType.UnknownAndPort
-                        || currentValues.ForType == NodeType.ObfuscatedAndPort
-                        || currentValues.ForType == NodeType.IpAndPort)
-                    {
-                        connection.RemotePort = currentValues.RemotePort;
-                    }
-                    else
-                    {
-                        connection.RemotePort = 0;
-                    }
-
-                    feature.ForType = currentValues.ForType;
-                    feature.For = currentValues.RemoteIpAndPortText.ToString();
-                }
-
-                if (checkBy && !StringSegment.IsNullOrEmpty(currentValues.LocalIpAndPortText))
-                {
-                    if (connection.LocalIpAddress != null)
-                    {
-                        feature.OriginalBy = connection.LocalIpAddress;
-                    }
-
-                    feature.OriginalByPort = connection.LocalPort;
-
-                    if (currentValues.ByType == NodeType.Ip
-                        || currentValues.ByType == NodeType.IpAndObfuscatedPort
-                        || currentValues.ByType == NodeType.IpAndPort)
-                    {
-                        connection.LocalIpAddress = currentValues.LocalIp;
-                    }
-                    else
-                    {
-                        connection.LocalIpAddress = null;
-                    }
-
-                    if (currentValues.ByType == NodeType.UnknownAndPort
-                        || currentValues.ByType == NodeType.ObfuscatedAndPort
-                        || currentValues.ByType == NodeType.IpAndPort)
-                    {
-                        connection.LocalPort = currentValues.LocalPort;
-                    }
-                    else
-                    {
-                        connection.LocalPort = 0;
-                    }
-                }
-
-                if (checkProto && currentValues.Scheme != null)
-                {
-                    feature.OriginalProto = request.Scheme;
-
-                    request.Scheme = currentValues.Scheme.ToString();
-                }
-
-                if (checkHost && currentValues.Host != null)
-                {
-                    feature.OriginalHost = request.Host.Value;
-
-                    request.Host = HostString.FromUriComponent(currentValues.Host.ToString());
-                }
-
-                context.Features.Set<IForwardedHttpFeature>(feature);
-
-                if (forwardedHeader.ForwardedValues.Count > entriesConsumed)
-                {
-                    // Truncate the consumed header values
-                    forwardedHeader.ForwardedValues = forwardedHeader.ForwardedValues.Take(forwardedHeader.ForwardedValues.Count - entriesConsumed).ToList();
-                }
-                else
-                {
-                    // All values were consumed
-                    forwardedHeader.ForwardedValues.Clear();
-                }
-
-                request.Headers.Remove(ForwardedHeader);
-
-                var value = forwardedHeader.Value;
-                if (value != StringValues.Empty)
-                {
-                    request.Headers.Add(ForwardedHeader, value);
-                }
+                feature.OriginalLocalIpAddress = connection.LocalIpAddress;
             }
+
+            feature.OriginalLocalPort = connection.LocalPort;
+
+            if (connection.RemoteIpAddress != null)
+            {
+                feature.OriginalRemoteIpAddress = connection.RemoteIpAddress;
+            }
+
+            feature.OriginalRemotePort = connection.RemotePort;
+
+            var request = context.Request;
+
+            feature.OriginalProto = request.Scheme;
+
+            feature.OriginalHost = request.Host.Value;
+
+            context.Features.Set<IForwardedHttpFeature>(feature);
         }
 
         private static (StringSegment ip, StringSegment port) GetIpPort(StringSegment ipAndPortText)
