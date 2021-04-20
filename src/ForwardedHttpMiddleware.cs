@@ -159,8 +159,10 @@ namespace AspNetCore.ForwardedHttp
             var connection = context.Connection;
             var currentValues = new SetOfForwarders()
             {
-                RemoteIpAndPort = connection.RemoteIpAddress != null ? new IPEndPoint(connection.RemoteIpAddress, connection.RemotePort) : null,
-                LocalIpAndPort = connection.LocalIpAddress != null ? new IPEndPoint(connection.LocalIpAddress, connection.LocalPort) : null,
+                RemoteIp = connection.RemoteIpAddress,
+                RemotePort = connection.RemotePort,
+                LocalIp = connection.LocalIpAddress,
+                LocalPort = connection.LocalPort,
                 // Host and Scheme initial values are never inspected, no need to set them here.
             };
 
@@ -174,76 +176,322 @@ namespace AspNetCore.ForwardedHttp
                 if (checkFor)
                 {
                     // For the first instance, allow remoteIp to be null for servers that don't support it natively.
-                    if (currentValues.RemoteIpAndPort != null && checkKnownIps && !CheckKnownAddress(currentValues.RemoteIpAndPort.Address))
+                    if (currentValues.RemoteIp != null && checkKnownIps && !CheckKnownAddress(currentValues.RemoteIp))
                     {
                         // Stop at the first unknown remote IP, but still apply changes processed so far.
-                        _logger.LogDebug(1, "Unknown proxy: {RemoteIpAndPort}", currentValues.RemoteIpAndPort);
+                        _logger.LogDebug(1, "Unknown proxy: {RemoteIpAndPort}", currentValues.RemoteIp);
                         break;
                     }
 
-                    if (IPEndPoint.TryParse(set.RemoteIpAndPortText, out var parsedEndPoint))
+
+                    var (ip, port) = GetIpPort(set.RemoteIpAndPortText);
+
+                    IpType ipType;
+
+                    if (IPAddress.TryParse(ip, out var parsedIp))
                     {
-                        applyChanges = true;
-                        set.RemoteIpAndPort = parsedEndPoint;
-                        currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
-                        currentValues.RemoteIpAndPort = set.RemoteIpAndPort;
-                        currentValues.ForType = NodeType.IP;
+                        ipType = IpType.Valid;
                     }
-                    else if (IsValidObfuscatedNode(set.RemoteIpAndPortText))
+                    else if (IsValidObfuscatedNode(ip))
                     {
-                        applyChanges = true;
-                        set.RemoteIpAndPort = null;
-                        currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
-                        currentValues.RemoteIpAndPort = set.RemoteIpAndPort;
-                        currentValues.ForType = NodeType.Obfuscated;
+                        ipType = IpType.Obfuscated;
                     }
-                    else if (IsUnknownNode(set.RemoteIpAndPortText))
+                    else if (IsUnknownNode(ip))
                     {
-                        applyChanges = true;
-                        set.RemoteIpAndPort = null;
-                        currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
-                        currentValues.RemoteIpAndPort = set.RemoteIpAndPort;
-                        currentValues.ForType = NodeType.Unknown;
+                        ipType = IpType.Unknown;
                     }
-                    else if (!StringSegment.IsNullOrEmpty(set.RemoteIpAndPortText))
+                    else
                     {
                         // Stop at the first unparsable IP, but still apply changes processed so far.
                         _logger.LogDebug(1, "Unparsable IP: {IpAndPortText}", set.RemoteIpAndPortText);
                         break;
                     }
+
+                    PortType portType = PortType.None;
+                    int parsedPort = 0;
+                    if (port != StringSegment.Empty)
+                    {
+                        if (int.TryParse(port, out parsedPort))
+                        {
+                            portType = PortType.Valid;
+                        }
+                        else if (IsValidObfuscatedNode(ip))
+                        {
+                            portType = PortType.Obfuscated;
+                        }
+                        else
+                        {
+                            // Stop at the first unparsable port, but still apply changes processed so far.
+                            _logger.LogDebug(1, "Unparsable port: {IpAndPortText}", set.RemoteIpAndPortText);
+                            break;
+                        }
+                    }
+
+                    switch ((ipType, portType))
+                    {
+                        case (IpType.Valid, PortType.Valid):
+                            applyChanges = true;
+
+                            set.RemoteIp = parsedIp;
+                            set.RemotePort = parsedPort;
+
+                            currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
+                            currentValues.RemoteIp = set.RemoteIp;
+                            currentValues.RemotePort = set.RemotePort;
+                            currentValues.ForType = NodeType.IpAndPort;
+                            break;
+                        case (IpType.Valid, PortType.None):
+                            applyChanges = true;
+
+                            set.RemoteIp = parsedIp;
+                            set.RemotePort = 0;
+
+                            currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
+                            currentValues.RemoteIp = set.RemoteIp;
+                            currentValues.RemotePort = set.RemotePort;
+                            currentValues.ForType = NodeType.Ip;
+                            break;
+                        case (IpType.Valid, PortType.Obfuscated):
+                            applyChanges = true;
+
+                            set.RemoteIp = parsedIp;
+                            set.RemotePort = 0;
+
+                            currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
+                            currentValues.RemoteIp = set.RemoteIp;
+                            currentValues.RemotePort = set.RemotePort;
+                            currentValues.ForType = NodeType.IpAndObfuscatedPort;
+                            break;
+
+                        case (IpType.Unknown, PortType.None):
+                            applyChanges = true;
+
+                            set.RemoteIp = null;
+                            set.RemotePort = 0;
+
+                            currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
+                            currentValues.RemoteIp = set.RemoteIp;
+                            currentValues.RemotePort = set.RemotePort;
+                            currentValues.ForType = NodeType.Unknown;
+                            break;
+
+                        case (IpType.Unknown, PortType.Obfuscated):
+                            applyChanges = true;
+
+                            set.RemoteIp = null;
+                            set.RemotePort = 0;
+
+                            currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
+                            currentValues.RemoteIp = set.RemoteIp;
+                            currentValues.RemotePort = set.RemotePort;
+                            currentValues.ForType = NodeType.UnknownAndObfuscatedPort;
+                            break;
+
+                        case (IpType.Unknown, PortType.Valid):
+                            applyChanges = true;
+
+                            set.RemoteIp = null;
+                            set.RemotePort = parsedPort;
+
+                            currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
+                            currentValues.RemoteIp = set.RemoteIp;
+                            currentValues.RemotePort = set.RemotePort;
+                            currentValues.ForType = NodeType.UnknownAndPort;
+                            break;
+
+                        case (IpType.Obfuscated, PortType.None):
+                            applyChanges = true;
+
+                            set.RemoteIp = null;
+                            set.RemotePort = 0;
+
+                            currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
+                            currentValues.RemoteIp = set.RemoteIp;
+                            currentValues.RemotePort = set.RemotePort;
+                            currentValues.ForType = NodeType.Obfuscated;
+                            break;
+
+                        case (IpType.Obfuscated, PortType.Obfuscated):
+                            applyChanges = true;
+
+                            set.RemoteIp = null;
+                            set.RemotePort = 0;
+
+                            currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
+                            currentValues.RemoteIp = set.RemoteIp;
+                            currentValues.RemotePort = set.RemotePort;
+                            currentValues.ForType = NodeType.ObfuscatedAndObfuscatedPort;
+                            break;
+
+                        case (IpType.Obfuscated, PortType.Valid):
+                            applyChanges = true;
+
+                            set.RemoteIp = null;
+                            set.RemotePort = parsedPort;
+
+                            currentValues.RemoteIpAndPortText = set.RemoteIpAndPortText;
+                            currentValues.RemoteIp = set.RemoteIp;
+                            currentValues.RemotePort = set.RemotePort;
+                            currentValues.ForType = NodeType.ObfuscatedAndPort;
+                            break;
+                    }
                 }
-                
+
                 if (checkBy)
                 {
-                    if (IPEndPoint.TryParse(set.LocalIpAndPortText, out var parsedEndPoint))
+                    if (!StringSegment.IsNullOrEmpty(set.LocalIpAndPortText))
                     {
-                        applyChanges = true;
-                        set.LocalIpAndPort = parsedEndPoint;
-                        currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
-                        currentValues.LocalIpAndPort = set.LocalIpAndPort;
-                        currentValues.ForType = NodeType.IP;
-                    }
-                    else if (IsValidObfuscatedNode(set.LocalIpAndPortText))
-                    {
-                        applyChanges = true;
-                        set.RemoteIpAndPort = null;
-                        currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
-                        currentValues.LocalIpAndPort = set.LocalIpAndPort;
-                        currentValues.ForType = NodeType.Obfuscated;
-                    }
-                    else if (IsUnknownNode(set.LocalIpAndPortText))
-                    {
-                        applyChanges = true;
-                        set.RemoteIpAndPort = null;
-                        currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
-                        currentValues.LocalIpAndPort = set.LocalIpAndPort;
-                        currentValues.ForType = NodeType.Unknown;
-                    }
-                    else if (!StringSegment.IsNullOrEmpty(set.LocalIpAndPortText))
-                    {
-                        // Stop at the first unparsable IP, but still apply changes processed so far.
-                        _logger.LogDebug(1, "Unparsable IP: {IpAndPortText}", set.LocalIpAndPortText);
-                        break;
+                        var (ip, port) = GetIpPort(set.LocalIpAndPortText);
+
+                        IpType ipType;
+
+                        if (IPAddress.TryParse(ip, out var parsedIp))
+                        {
+                            ipType = IpType.Valid;
+                        }
+                        else if (IsValidObfuscatedNode(ip))
+                        {
+                            ipType = IpType.Obfuscated;
+                        }
+                        else if (IsUnknownNode(ip))
+                        {
+                            ipType = IpType.Unknown;
+                        }
+                        else
+                        {
+                            // Stop at the first unparsable IP, but still apply changes processed so far.
+                            _logger.LogDebug(1, "Unparsable IP: {IpAndPortText}", set.LocalIpAndPortText);
+                            break;
+                        }
+
+                        PortType portType = PortType.None;
+                        short parsedPort = 0;
+                        if (port != StringSegment.Empty)
+                        {
+                            if (short.TryParse(port, out parsedPort))
+                            {
+                                portType = PortType.Valid;
+                            }
+                            else if (IsValidObfuscatedNode(ip))
+                            {
+                                portType = PortType.Obfuscated;
+                            }
+                            else
+                            {
+                                // Stop at the first unparsable port, but still apply changes processed so far.
+                                _logger.LogDebug(1, "Unparsable port: {IpAndPortText}", set.LocalIpAndPortText);
+                                break;
+                            }
+                        }
+
+                        switch ((ipType, portType))
+                        {
+                            case (IpType.Valid, PortType.Valid):
+                                applyChanges = true;
+
+                                set.LocalIp = parsedIp;
+                                set.LocalPort = parsedPort;
+
+                                currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
+                                currentValues.LocalIp = set.LocalIp;
+                                currentValues.LocalPort = set.LocalPort;
+                                currentValues.ForType = NodeType.IpAndPort;
+                                break;
+                            case (IpType.Valid, PortType.None):
+                                applyChanges = true;
+
+                                set.LocalIp = parsedIp;
+                                set.LocalPort = 0;
+
+                                currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
+                                currentValues.LocalIp = set.LocalIp;
+                                currentValues.LocalPort = set.LocalPort;
+                                currentValues.ForType = NodeType.Ip;
+                                break;
+                            case (IpType.Valid, PortType.Obfuscated):
+                                applyChanges = true;
+
+                                set.LocalIp = parsedIp;
+                                set.LocalPort = 0;
+
+                                currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
+                                currentValues.LocalIp = set.LocalIp;
+                                currentValues.LocalPort = set.LocalPort;
+                                currentValues.ForType = NodeType.IpAndObfuscatedPort;
+                                break;
+
+                            case (IpType.Unknown, PortType.None):
+                                applyChanges = true;
+
+                                set.LocalIp = null;
+                                set.LocalPort = 0;
+
+                                currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
+                                currentValues.LocalIp = set.LocalIp;
+                                currentValues.LocalPort = set.LocalPort;
+                                currentValues.ForType = NodeType.Unknown;
+                                break;
+
+                            case (IpType.Unknown, PortType.Obfuscated):
+                                applyChanges = true;
+
+                                set.LocalIp = null;
+                                set.LocalPort = 0;
+
+                                currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
+                                currentValues.LocalIp = set.LocalIp;
+                                currentValues.LocalPort = set.LocalPort;
+                                currentValues.ForType = NodeType.UnknownAndObfuscatedPort;
+                                break;
+
+                            case (IpType.Unknown, PortType.Valid):
+                                applyChanges = true;
+
+                                set.LocalIp = null;
+                                set.LocalPort = parsedPort;
+
+                                currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
+                                currentValues.LocalIp = set.LocalIp;
+                                currentValues.LocalPort = set.LocalPort;
+                                currentValues.ForType = NodeType.UnknownAndPort;
+                                break;
+
+                            case (IpType.Obfuscated, PortType.None):
+                                applyChanges = true;
+
+                                set.LocalIp = null;
+                                set.LocalPort = 0;
+
+                                currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
+                                currentValues.LocalIp = set.LocalIp;
+                                currentValues.LocalPort = set.LocalPort;
+                                currentValues.ForType = NodeType.Obfuscated;
+                                break;
+
+                            case (IpType.Obfuscated, PortType.Obfuscated):
+                                applyChanges = true;
+
+                                set.LocalIp = null;
+                                set.LocalPort = 0;
+
+                                currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
+                                currentValues.LocalIp = set.LocalIp;
+                                currentValues.LocalPort = set.LocalPort;
+                                currentValues.ForType = NodeType.ObfuscatedAndObfuscatedPort;
+                                break;
+
+                            case (IpType.Obfuscated, PortType.Valid):
+                                applyChanges = true;
+
+                                set.LocalIp = null;
+                                set.LocalPort = parsedPort;
+
+                                currentValues.LocalIpAndPortText = set.LocalIpAndPortText;
+                                currentValues.LocalIp = set.LocalIp;
+                                currentValues.LocalPort = set.LocalPort;
+                                currentValues.ForType = NodeType.ObfuscatedAndPort;
+                                break;
+                        }
                     }
                 }
 
@@ -280,31 +528,62 @@ namespace AspNetCore.ForwardedHttp
 
                     feature.OriginalRemotePort = connection.RemotePort;
 
-                    if (currentValues.ForType == NodeType.IP)
+                    if (currentValues.ForType == NodeType.Ip
+                        || currentValues.ForType == NodeType.IpAndObfuscatedPort
+                        || currentValues.ForType == NodeType.IpAndPort)
                     {
-                        connection.RemoteIpAddress = currentValues.RemoteIpAndPort.Address;
-                        connection.RemotePort = currentValues.RemoteIpAndPort.Port;
-
+                        connection.RemoteIpAddress = currentValues.RemoteIp;
                     }
                     else
                     {
                         connection.RemoteIpAddress = null;
+                    }
+
+                    if (currentValues.ForType == NodeType.UnknownAndPort
+                        || currentValues.ForType == NodeType.ObfuscatedAndPort
+                        || currentValues.ForType == NodeType.IpAndPort)
+                    {
+                        connection.RemotePort = currentValues.RemotePort;
+                    }
+                    else
+                    {
                         connection.RemotePort = 0;
                     }
-                    
+
                     feature.ForType = currentValues.ForType;
                     feature.For = currentValues.RemoteIpAndPortText.ToString();
                 }
 
-                if (checkBy && currentValues.LocalIpAndPort != null)
+                if (checkBy && !StringSegment.IsNullOrEmpty(currentValues.LocalIpAndPortText))
                 {
                     if (connection.LocalIpAddress != null)
                     {
                         feature.OriginalBy = connection.LocalIpAddress;
                     }
 
-                    connection.LocalIpAddress = currentValues.LocalIpAndPort.Address;
-                    connection.LocalPort = currentValues.LocalIpAndPort.Port;
+                    feature.OriginalByPort = connection.LocalPort;
+
+                    if (currentValues.ByType == NodeType.Ip
+                        || currentValues.ByType == NodeType.IpAndObfuscatedPort
+                        || currentValues.ByType == NodeType.IpAndPort)
+                    {
+                        connection.LocalIpAddress = currentValues.LocalIp;
+                    }
+                    else
+                    {
+                        connection.LocalIpAddress = null;
+                    }
+
+                    if (currentValues.ByType == NodeType.UnknownAndPort
+                        || currentValues.ByType == NodeType.ObfuscatedAndPort
+                        || currentValues.ByType == NodeType.IpAndPort)
+                    {
+                        connection.LocalPort = currentValues.LocalPort;
+                    }
+                    else
+                    {
+                        connection.LocalPort = 0;
+                    }
                 }
 
                 if (checkProto && currentValues.Scheme != null)
@@ -344,10 +623,65 @@ namespace AspNetCore.ForwardedHttp
             }
         }
 
+        private static (StringSegment ip, StringSegment port) GetIpPort(StringSegment ipAndPortText)
+        {
+            StringSegment ip;
+            StringSegment port;
+
+
+            if (ipAndPortText.StartsWith("[", StringComparison.OrdinalIgnoreCase))
+            {
+                // ipv6 
+
+                if (ipAndPortText.EndsWith("]", StringComparison.OrdinalIgnoreCase))
+                {
+                    // ipv6 without port
+                    // [2001:db8:cafe::17]
+
+                    ip = ipAndPortText;
+                    port = StringSegment.Empty;
+                }
+                else
+                {
+                    // ipv6 with port
+                    // [2001:db8:cafe::17]:12345
+
+                    var index = ipAndPortText.IndexOf(']');
+                    ip = ipAndPortText.Subsegment(1, index - 1);
+                    port = ipAndPortText.Subsegment(index + 2);
+                }
+            }
+            else
+            {
+                // ipv4 
+
+                var colonIndex = ipAndPortText.IndexOf(':');
+                var hasPort = colonIndex > 0;
+                if (hasPort)
+                {
+                    // ipv4 with port
+                    // 192.0.2.43:47011
+
+                    ip = ipAndPortText.Subsegment(0, colonIndex);
+                    port = ipAndPortText.Subsegment(colonIndex + 1);
+                }
+                else
+                {
+                    // ipv4 without port
+                    // 192.0.2.43
+
+                    ip = ipAndPortText;
+                    port = StringSegment.Empty;
+                }
+            }
+
+            return (ip, port);
+        }
+
         private bool IsValidObfuscatedNode(StringSegment remoteIpAndPortText)
         {
             if (remoteIpAndPortText[0] != '_')
-            { 
+            {
                 return false;
             }
 
@@ -507,11 +841,13 @@ namespace AspNetCore.ForwardedHttp
         {
             public NodeType ForType;
             public StringSegment RemoteIpAndPortText;
-            public IPEndPoint RemoteIpAndPort;
+            public IPAddress RemoteIp;
+            public int RemotePort;
 
             public NodeType ByType;
             public StringSegment LocalIpAndPortText;
-            public IPEndPoint LocalIpAndPort;
+            public IPAddress LocalIp;
+            public int LocalPort;
 
             public StringSegment Host;
             public StringSegment Scheme;

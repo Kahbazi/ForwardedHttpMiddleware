@@ -21,6 +21,8 @@ namespace AspNetCore.ForwardedHttp
         public int OriginalRemotePort { get; set; }
 
         public IPAddress OriginalBy { get; set; }
+        
+        public int OriginalByPort { get; set; }
 
         public string OriginalHost { get; set; }
 

@@ -49,7 +49,7 @@ namespace AspNetCore.ForwardedHttp.Tests
             var feature = context.Features.Get<IForwardedHttpFeature>();
             Assert.NotNull(feature);
             Assert.Null(feature.OriginalRemoteIpAddress);
-            Assert.Equal(NodeType.IP, feature.ForType);
+            Assert.Equal(NodeType.IpAndPort, feature.ForType);
             // Should have been consumed and removed
             Assert.False(context.Request.Headers.ContainsKey("Forwarded"));
         }
@@ -842,12 +842,12 @@ namespace AspNetCore.ForwardedHttp.Tests
         }
 
         [Theory]
-        [InlineData("For=22.33.44.55, For=::ffff:127.0.0.1", "", "", "22.33.44.55")]
-        [InlineData("For=22.33.44.55, For=::ffff:172.123.142.121", "172.123.142.121", "", "22.33.44.55")]
-        [InlineData("For=22.33.44.55, For=::ffff:172.123.142.121", "::ffff:172.123.142.121", "", "22.33.44.55")]
-        [InlineData("For=22.33.44.55, For=::ffff:172.123.142.121, For=172.32.24.23", "", "172.0.0.0/8", "22.33.44.55")]
-        [InlineData("For=2a00:1450:4009:802::200e, For=2a02:26f0:2d:183::356e, For=::ffff:172.123.142.121, For=172.32.24.23", "", "172.0.0.0/8,2a02:26f0:2d:183::1/64", "2a00:1450:4009:802::200e")]
-        [InlineData("For=22.33.44.55, For=2a02:26f0:2d:183::356e, For=::ffff:127.0.0.1", "2a02:26f0:2d:183::356e", "", "22.33.44.55")]
+        [InlineData("For=22.33.44.55, For=[::ffff:127.0.0.1]", "", "", "22.33.44.55")]
+        [InlineData("For=22.33.44.55, For=[::ffff:172.123.142.121]", "172.123.142.121", "", "22.33.44.55")]
+        [InlineData("For=22.33.44.55, For=[::ffff:172.123.142.121]", "::ffff:172.123.142.121", "", "22.33.44.55")]
+        [InlineData("For=22.33.44.55, For=[::ffff:172.123.142.121], For=172.32.24.23", "", "172.0.0.0/8", "22.33.44.55")]
+        [InlineData("For=[2a00:1450:4009:802::200e], For=[2a02:26f0:2d:183::356e], For=[::ffff:172.123.142.121], For=172.32.24.23", "", "172.0.0.0/8,2a02:26f0:2d:183::1/64", "2a00:1450:4009:802::200e")]
+        [InlineData("For=22.33.44.55, For=[2a02:26f0:2d:183::356e], For=[::ffff:127.0.0.1]", "2a02:26f0:2d:183::356e", "", "22.33.44.55")]
         public async Task XForwardForIPv4ToIPv6Mapping(string forwardedHeader, string knownProxies, string knownNetworks, string expectedRemoteIp)
         {
             var options = new ForwardedHttpOptions
